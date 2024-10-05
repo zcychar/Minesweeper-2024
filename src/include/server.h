@@ -15,6 +15,12 @@ int columns;      // The count of columns of the game map. You MUST NOT modify i
 int total_mines;  // The count of mines of the game map. You MUST NOT modify its name. You should initialize this
                   // variable in function InitMap. It will be used in the advanced task.
 int game_state;  // The state of the game, 0 for continuing, 1 for winning, -1 for losing. You MUST NOT modify its name.
+int visit_count;  // Blocks which already been visited.
+int marked_mine_count;
+
+char initial_map[65][65];
+bool visit_state[65][65];
+int mine_count[65][65];
 
 /**
  * @brief The definition of function InitMap()
@@ -28,9 +34,47 @@ int game_state;  // The state of the game, 0 for continuing, 1 for winning, -1 f
  * where X stands for a mine block and . stands for a normal block. After executing this function, your game map
  * would be initialized, with all the blocks unvisited.
  */
+int MineCounter(int r, int c) {
+  int count = 0;
+  if (initial_map[r][c] != '.') {
+    return 0;
+  }
+
+  for (int i = -1; i <= 1; ++i) {
+    for (int j = -1; j <= 1; ++j) {
+      int next_r = r + i, next_c = c + j;
+      if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
+        continue;
+      }
+      if (initial_map[next_r][next_c] != '.') {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
 void InitMap() {
   std::cin >> rows >> columns;
-  // TODO (student): Implement me!
+  total_mines = 0;
+  visit_count = 0;
+  marked_mine_count = 0;
+
+  for (int i = 0; i < rows; ++i) {
+    for (int j = 0; j < columns; ++j) {  // initialize the map and the visit state
+      std::cin >> initial_map[i][j];
+      if (initial_map[i][j] == 'X') {
+        total_mines++;
+      }
+      visit_state[i][j] = 0;
+    }
+  }
+
+  for (int i = 0; i < rows; ++i) {  // counting the mine number in each block
+    for (int j = 0; j < columns; ++j) {
+      mine_count[i][j] = MineCounter(i, j);
+    }
+  }
 }
 
 /**
@@ -64,7 +108,43 @@ void InitMap() {
  * @note For invalid operation, you should not do anything.
  */
 void VisitBlock(int r, int c) {
-  // TODO (student): Implement me!
+  if (r < 0 || r >= rows || c < 0 || c >= columns || visit_state[r][c]) {
+    return;
+  }  // Tests of operation viability.
+
+  visit_state[r][c] = true;
+
+  switch (initial_map[r][c]) {
+    case '.': {
+      visit_count++;
+      if (mine_count[r][c]!=0) {
+        break;
+      }
+      for (int i = -1; i <= 1; ++i) {
+        for (int j = -1; j <= 1; ++j) {
+          int next_r = r + i, next_c = c + j;
+          if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
+            continue;
+          }  // In case of visiting invalid array.
+          if (initial_map[next_r][next_c] == '.' && !visit_state[next_r][next_c]) {
+            VisitBlock(next_r, next_c);
+          }
+        }
+      }
+      break;
+    }
+    // Simulating the auto visit proceed.
+    case 'X': {
+      game_state = -1;
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+  if (visit_count == rows * columns - total_mines && !game_state) {
+    game_state = 1;
+  }
 }
 
 /**
@@ -101,9 +181,26 @@ void VisitBlock(int r, int c) {
  * @note For invalid operation, you should not do anything.
  */
 void MarkMine(int r, int c) {
-  // TODO (student): Implement me!
+  if(visit_state[r][c])return;
+  switch (initial_map[r][c]) {
+    case 'X': {
+      initial_map[r][c] = '@';
+      visit_state[r][c] = true;
+      marked_mine_count++;
+      break;
+    }
+      // Change the visit state so that this block won't be involved in VisitBlock operation.
+    case '.': {
+      game_state = -1;
+      initial_map[r][c]='X';
+      visit_state[r][c] = true;
+      break;
+    }
+    default: {
+      break;
+    }
+  }
 }
-
 /**
  * @brief The definition of function AutoExplore(int, int)
  *
@@ -121,9 +218,33 @@ void MarkMine(int r, int c) {
  * And the game ends (and player wins).
  */
 void AutoExplore(int r, int c) {
-  // TODO (student): Implement me!
+  if (! visit_state[r][c]  || initial_map[r][c] != '.') {
+    return;
+  }
+  bool auto_explore_available = false;
+  for (int i = -1; i <= 1; ++i) {
+    for (int j = -1; j <= 1; ++j) {
+      int next_r = r + i, next_c = c + j;
+      if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
+        continue;
+      }
+      if (initial_map[next_r][next_c] == 'X') {
+        auto_explore_available = true;
+      }
+    }
+  }
+  if (!auto_explore_available) {
+    for (int i = -1; i <= 1; ++i) {
+      for (int j = -1; j <= 1; ++j) {
+        int next_r = r + i, next_c = c + j;
+        if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
+          continue;
+        }
+        VisitBlock(next_r, next_c);
+      }
+    }
+  }
 }
-
 /**
  * @brief The definition of function ExitGame()
  *
@@ -134,15 +255,19 @@ void AutoExplore(int r, int c) {
  * @note If the player wins, we consider that ALL mines are correctly marked.
  */
 void ExitGame() {
-  // TODO (student): Implement me!
+  if (game_state == 1) {
+    std::cout << "YOU WIN!\n" << visit_count << " " << total_mines;
+  } else {
+    std::cout << "GAME OVER!\n" << visit_count << " " << marked_mine_count;
+  }
   exit(0);  // Exit the game immediately
 }
 
 /**
  * @brief The definition of function PrintMap()
  *
- * @details This function is designed to print the game map to stdout. We take the 3 * 3 game map above as an example.
- * At the beginning, if you call PrintMap(), the stdout would be
+ * @details This function is designed to print the game map to stdout. We take the 3 * 3 game map above as an
+ * example. At the beginning, if you call PrintMap(), the stdout would be
  *    ???
  *    ???
  *    ???
@@ -162,8 +287,34 @@ void ExitGame() {
  *
  * @note Use std::cout to print the game map, especially when you want to try the advanced task!!!
  */
-void PrintMap() {
-  // TODO (student): Implement me!
-}
 
+void PrintMap() {
+  if (game_state == 1) {
+    for (int i = 0; i < rows; ++i) {
+      for (int j = 0; j < columns; ++j) {
+        if (initial_map[i][j] == '.') {
+          std::cout << mine_count[i][j];
+        } else {
+          std::cout << '@';
+        }
+      }
+      std::cout << "\n";
+    }
+  } else {
+    for (int i = 0; i < rows; ++i) {
+      for (int j = 0; j < columns; ++j) {
+        if (visit_state[i][j] ) {
+          if (initial_map[i][j] == '.' ) {
+            std::cout << mine_count[i][j];
+          } else {
+            std::cout << initial_map[i][j];
+          }
+        } else {
+          std::cout << "?";
+        }
+      }
+      std::cout << "\n";
+    }
+  }
+}
 #endif
