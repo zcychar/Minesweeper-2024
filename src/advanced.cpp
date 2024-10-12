@@ -28,6 +28,7 @@ void Execute(int row, int column, int type) {
   }
   if (game_state != 0) {
     // PrintMap(); // this line may help you debug
+    // std::cout<<row<<" "<<column<<" "<<type<<std::endl;
     ExitGame();
     if (batch_mode) {
       return;

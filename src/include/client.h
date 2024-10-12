@@ -10,10 +10,7 @@ extern int columns;      // The count of columns of the game map.
 extern int total_mines;  // The count of mines of the game map.
 
 char current_map[65][65];
-bool search_state[65][65];  // Used in local search ,if the block is visited, set it to true.
-std::queue<std::pair<int, int> > visit_queue;
-int virtual_map[65][65];  // Used in local search ,after each step update the mine state.
-
+int virtual_map[65][65];
 // You MUST NOT use any other external variables except for rows, columns and total_mines.
 
 /**
@@ -138,13 +135,14 @@ bool SillyLogic() {
   }
   return false;
 }
+
 void LuckyGuess() {
   srand(time(NULL));
   for (int i = 1; i <= 500; ++i) {
     int r = rand() % rows, c = rand() % columns;
     if (current_map[r][c] == '?') {
       for (int next_r = r - 1; next_r <= r + 1; next_r++) {
-        for (int next_c = c - 1; next_c <= c + 1; next_c++) {
+        for (int next_c = c - 1; next_c <= c + 1; next_c++) {  // For the blocks around the pile, do some calculation.
           if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
             continue;
           }
@@ -174,52 +172,125 @@ void LuckyGuess() {
   }
 }
 
-/*
-void Influence(int r,int c){
+int NonPublicPile(int r1, int c1, int r2, int c2) {
+  int count = 0;
   for (int i = -1; i <= 1; ++i) {
     for (int j = -1; j <= 1; ++j) {
-      int next_r = r + i, next_c = c + j;
+      int next_r = r1 + i, next_c = c1 + j;
       if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
         continue;
       }
-      if (current_map[next_r][next_c] >='0'&&current_map[next_r][next_c]<='9'&&!search_state[next_r][next_c]) {
-        visit_queue.push(std::make_pair(next_r, next_c));
+      if (abs(next_r - r2) <= 1 && abs(next_c - c2) <= 1) {
+        continue;
+      }
+      if (current_map[next_r][next_c] == '?') {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+void MarkNonPublicPile(int r1, int c1, int r2, int c2) {
+  for (int i = -1; i <= 1; ++i) {
+    for (int j = -1; j <= 1; ++j) {
+      int next_r = r1 + i, next_c = c1 + j;
+      if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
+        continue;
+      }
+      if (abs(next_r - r2) <= 1 && abs(next_c - c2) <= 1) {
+        continue;
+      }
+      if (current_map[next_r][next_c] == '?') {
+        Execute(next_r, next_c, 1);
+        return;
       }
     }
   }
 }
-//Influence the blocks around after a mine is virtually set.
-void SearchMachine(){
-  while(!visit_queue.empty()){
-    int r=visit_queue.front().first,c=visit_queue.front().second;
-
+void ClickNonPublicPile(int r1, int c1, int r2, int c2) {
+  for (int i = -1; i <= 1; ++i) {
+    for (int j = -1; j <= 1; ++j) {
+      int next_r = r1 + i, next_c = c1 + j;
+      if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
+        continue;
+      }
+      if (abs(next_r - r2) <= 1 && abs(next_c - c2) <= 1) {
+        continue;
+      }
+      if (current_map[next_r][next_c] == '?') {
+        Execute(next_r, next_c, 0);
+        return;
+      }
+    }
   }
 }
-//
-bool LocalSearch(){
-  for(int i=0;i<rows;++i){
-    for(int j=0;j<columns;++j){
-      if(current_map[i][j]>'0'&&current_map[i][j]<='9'&&!search_state[i][j]){
-          visit_queue.push(std::make_pair(i,j));
-          SearchMachine();
+
+bool BasicRules() {
+  for (int i = 0; i < rows; ++i) {
+    for (int j = 0; j < columns; ++j) {
+      if (current_map[i][j] >= '0' && current_map[i][j] <= '9') {
+        virtual_map[i][j] += current_map[i][j] - '0';
+      }
+      if (current_map[i][j] == '@') {
+        for (int next_r = i - 1; next_r <= i + 1; next_r++) {
+          for (int next_c = j - 1; next_c <= j + 1; next_c++) {
+            if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
+              continue;
+            }
+            if (current_map[next_r][next_c] >= '0' && current_map[next_r][next_c] <= '9') {
+              virtual_map[next_r][next_c]--;
+            }
+          }
+        }
+      }
+    }
+  }
+  int next_rmove[4] = {0, -1, 0, 1}, next_cmove[4] = {1, 0, -1, 0};
+  bool status = false;
+  for (int i = 0; i < rows; ++i) {
+    for (int j = 0; j < columns; ++j) {
+      if (virtual_map[i][j] == 0) {
+        continue;
+      }
+      for (int opt = 0; opt < 4; ++opt) {
+        int next_r = i + next_rmove[opt], next_c = j + next_cmove[opt];
+        if (next_r < 0 || next_r >= rows || next_c < 0 || next_c >= columns) {
+          continue;
+        }
+        if (current_map[next_r][next_c] < '0' || current_map[next_r][next_c] > '9') {
+          continue;
+        }
+        int left_pile = NonPublicPile(i, j, next_r, next_c);
+        if (left_pile + virtual_map[next_r][next_c] == virtual_map[i][j]) {
+          if (left_pile) {
+            MarkNonPublicPile(i, j, next_r, next_c);
+            return true;
+          }
+          if (NonPublicPile(next_r, next_c, i, j)) {
+            ClickNonPublicPile(next_r, next_c, i, j);
+            return true;
+          }
+        }
       }
     }
   }
   return false;
 }
-*/
+
 void Decide() {
   bool state = false;
   state = SillyLogic();
   if (!state) {
+    for (int i = 0; i < rows; ++i) {
+      for (int j = 0; j < columns; ++j) {
+        virtual_map[i][j] = 0;
+      }
+    }
+    state = BasicRules();
+  }
+  if (!state) {
     LuckyGuess();
   }
-  // if(!state){
-  //   LocalSearch();
-  // }
-  // while (true) {
-  //   Execute(0, 0);
-  // }
 }
 
 #endif
